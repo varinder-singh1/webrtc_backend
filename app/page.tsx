@@ -1,65 +1,140 @@
-import Image from "next/image";
+"use client";
+import { useEffect, useRef, useState } from "react";
+import io, { Socket } from "socket.io-client";
+
+const ROOM_ID = "demo-room";
+let socket: Socket; // Global socket (not recreated on every render)
 
 export default function Home() {
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const [role, setRole] = useState<"sharer" | "viewer" | null>(null);
+  const peerConnections = useRef<{ [key: string]: RTCPeerConnection }>({});
+
+  // ✅ Initialize socket only once
+  useEffect(() => {
+    if (!socket) {
+      socket = io("http://localhost:3001");
+      socket.on("connect", () =>
+        console.log("✅ Socket connected:", socket.id)
+      );
+    }
+
+    // 👂 Handle signaling events
+    socket.on("viewer-joined", async (viewerId: string) => {
+      console.log("👀 Viewer joined:", viewerId);
+      if (role !== "sharer") return;
+
+      const pc = createPeerConnection(viewerId);
+      peerConnections.current[viewerId] = pc;
+
+      // Attach screen tracks if already available
+      const stream = localVideoRef.current?.srcObject as MediaStream | null;
+      if (stream) {
+        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+      }
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      socket.emit("offer", { viewerId, offer });
+    });
+
+    socket.on("offer", async ({ offer, sharerId }) => {
+      if (role !== "viewer") return;
+      const pc = createPeerConnection(sharerId);
+      peerConnections.current[sharerId] = pc;
+
+      await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      socket.emit("answer", { sharerId, answer });
+    });
+
+    socket.on("answer", async ({ answer, viewerId }) => {
+      const pc = peerConnections.current[viewerId];
+      if (pc) await pc.setRemoteDescription(new RTCSessionDescription(answer));
+    });
+
+    socket.on("ice-candidate", ({ candidate, from }) => {
+      const pc = peerConnections.current[from];
+      if (pc && candidate)
+        pc.addIceCandidate(new RTCIceCandidate(candidate));
+    });
+  }, [role]);
+
+  // ✅ Create peer connection helper
+  const createPeerConnection = (targetId: string) => {
+    const pc = new RTCPeerConnection();
+
+    pc.onicecandidate = (e) => {
+      if (e.candidate)
+        socket.emit("ice-candidate", {
+          target: targetId,
+          candidate: e.candidate,
+        });
+    };
+
+    pc.ontrack = (e) => {
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = e.streams[0];
+      }
+    };
+
+    return pc;
+  };
+
+  // 🎥 Start screen sharing
+  const startSharing = async () => {
+    setRole("sharer");
+    socket.emit("join-room", { roomId: ROOM_ID, role: "sharer" });
+
+    const stream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+    });
+    if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+  };
+
+  // 👁️ Start viewing
+  const startViewing = async () => {
+    setRole("viewer");
+    socket.emit("join-room", { roomId: ROOM_ID, role: "viewer" });
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <div className="flex flex-col items-center gap-4 p-4">
+      <h1 className="text-2xl font-bold">WebRTC Screen Sharing</h1>
+
+      <div className="flex gap-4">
+        <button
+          onClick={startSharing}
+          className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
+        >
+          Start Sharing
+        </button>
+
+        <button
+          onClick={startViewing}
+          className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded"
+        >
+          Start Viewing
+        </button>
+      </div>
+
+      <div className="mt-6 flex flex-col items-center">
+        <video
+          ref={localVideoRef}
+          autoPlay
+          playsInline
+          muted
+          className="w-96 border rounded"
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+        <video
+          ref={remoteVideoRef}
+          autoPlay
+          playsInline
+          className="w-96 border rounded mt-4"
+        />
+      </div>
     </div>
   );
 }
