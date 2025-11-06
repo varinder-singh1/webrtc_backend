@@ -14,7 +14,7 @@ export default function Home() {
   // ✅ Initialize socket only once
   useEffect(() => {
     if (!socket) {
-      socket = io("https://rtc-backend.duckdns.org/");
+      socket = io("https://weatherradar.duckdns.org/");
       socket.on("connect", () =>
         console.log("✅ Socket connected:", socket.id)
       );
