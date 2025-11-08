@@ -34,7 +34,6 @@ export default function Home() {
   useEffect(() => {
     if (!socket) return;
 
-    // --- SHARER: Viewer joined ---
     const handleViewerJoined = async (viewerId: string) => {
       if (role !== "sharer") return;
       console.log("👀 Viewer joined:", viewerId);
@@ -55,7 +54,6 @@ export default function Home() {
       socket.emit("offer", { viewerId, offer });
     };
 
-    // --- VIEWER: Receive offer ---
     const handleOffer = async ({ offer, sharerId }: any) => {
       if (role !== "viewer") return;
       console.log("📩 Received offer from sharer:", sharerId);
@@ -73,7 +71,6 @@ export default function Home() {
       socket.emit("answer", { sharerId, answer });
     };
 
-    // --- SHARER: Receive answer ---
     const handleAnswer = async ({ answer, viewerId }: any) => {
       const pc = peerConnections.current[viewerId];
       if (!pc) return;
@@ -103,7 +100,6 @@ export default function Home() {
       }
     };
 
-    // --- ICE candidate ---
     const handleIceCandidate = ({ candidate, from }: any) => {
       const pc = peerConnections.current[from];
       if (pc && candidate) {
@@ -129,9 +125,12 @@ export default function Home() {
   const createPeerConnection = (targetId: string) => {
     const pc = new RTCPeerConnection({
       iceServers: [
-        { urls: "stun:stun.l.google.com:19302" }, // Public STUN server
-        // Optional TURN server:
-        // { urls: "turn:your-turn-server:3478", username: "user", credential: "pass" }
+        { urls: "stun:stun.l.google.com:19302" }, // Public STUN
+        {
+          urls: "turn:numb.viagenie.ca", // Public TURN
+          username: "webrtc@live.com",
+          credential: "muazkh",
+        },
       ],
     });
 
@@ -166,7 +165,6 @@ export default function Home() {
     return pc;
   };
 
-  // --- Start sharing ---
   const startSharing = async () => {
     setRole("sharer");
     socket.emit("join-room", { roomId: ROOM_ID, role: "sharer" });
@@ -179,7 +177,6 @@ export default function Home() {
     }
   };
 
-  // --- Start viewing ---
   const startViewing = async () => {
     setRole("viewer");
     socket.emit("join-room", { roomId: ROOM_ID, role: "viewer" });
