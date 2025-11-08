@@ -13,16 +13,20 @@ export default function Home() {
   // Store peer connections per target
   const peerConnections = useRef<{ [key: string]: RTCPeerConnection }>({});
 
+  // Initialize socket once
   useEffect(() => {
     if (!socket) {
       socket = io("https://weatherradar.duckdns.org/");
-      socket.on("connect", () =>
-        console.log("✅ Socket connected:", socket.id)
-      );
+      socket.on("connect", () => console.log("✅ Socket connected:", socket.id));
     }
+  }, []);
+
+  // Attach signaling events once
+  useEffect(() => {
+    if (!socket) return;
 
     // Viewer joined (sharer side)
-    socket.on("viewer-joined", async (viewerId: string) => {
+    const handleViewerJoined = async (viewerId: string) => {
       if (role !== "sharer") return;
 
       const pc = createPeerConnection(viewerId);
@@ -32,12 +36,12 @@ export default function Home() {
       if (stream) stream.getTracks().forEach((t) => pc.addTrack(t, stream));
 
       const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer); // ✅ await before emitting
+      await pc.setLocalDescription(offer);
       socket.emit("offer", { viewerId, offer });
-    });
+    };
 
     // Receive offer (viewer side)
-    socket.on("offer", async ({ offer, sharerId }) => {
+    const handleOffer = async ({ offer, sharerId }: any) => {
       if (role !== "viewer") return;
 
       const pc = createPeerConnection(sharerId);
@@ -47,26 +51,37 @@ export default function Home() {
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       socket.emit("answer", { sharerId, answer });
-    });
+    };
 
     // Receive answer (sharer side)
-    socket.on("answer", async ({ answer, viewerId }) => {
+    const handleAnswer = async ({ answer, viewerId }: any) => {
       const pc = peerConnections.current[viewerId];
       if (!pc) return;
 
-      // ✅ Only set remote if in have-local-offer state
       if (pc.signalingState === "have-local-offer") {
         await pc.setRemoteDescription(new RTCSessionDescription(answer));
       } else {
         console.warn("Cannot set remote, signaling state:", pc.signalingState);
       }
-    });
+    };
 
     // ICE candidate
-    socket.on("ice-candidate", ({ candidate, from }) => {
+    const handleIceCandidate = ({ candidate, from }: any) => {
       const pc = peerConnections.current[from];
       if (pc && candidate) pc.addIceCandidate(new RTCIceCandidate(candidate));
-    });
+    };
+
+    socket.on("viewer-joined", handleViewerJoined);
+    socket.on("offer", handleOffer);
+    socket.on("answer", handleAnswer);
+    socket.on("ice-candidate", handleIceCandidate);
+
+    return () => {
+      socket.off("viewer-joined", handleViewerJoined);
+      socket.off("offer", handleOffer);
+      socket.off("answer", handleAnswer);
+      socket.off("ice-candidate", handleIceCandidate);
+    };
   }, [role]);
 
   // Create peer connection
@@ -102,17 +117,34 @@ export default function Home() {
     <div className="flex flex-col items-center gap-4 p-4">
       <h1 className="text-2xl font-bold">WebRTC Screen Sharing</h1>
       <div className="flex gap-4">
-        <button onClick={startSharing} className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">
+        <button
+          onClick={startSharing}
+          className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
+        >
           Start Sharing
         </button>
-        <button onClick={startViewing} className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded">
+        <button
+          onClick={startViewing}
+          className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded"
+        >
           Start Viewing
         </button>
       </div>
 
       <div className="mt-6 flex flex-col items-center">
-        <video ref={localVideoRef} autoPlay playsInline muted className="w-96 border rounded" />
-        <video ref={remoteVideoRef} autoPlay playsInline className="w-96 border rounded mt-4" />
+        <video
+          ref={localVideoRef}
+          autoPlay
+          playsInline
+          muted
+          className="w-96 border rounded"
+        />
+        <video
+          ref={remoteVideoRef}
+          autoPlay
+          playsInline
+          className="w-96 border rounded mt-4"
+        />
       </div>
     </div>
   );
