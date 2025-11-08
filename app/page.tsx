@@ -127,9 +127,9 @@ export default function Home() {
       iceServers: [
         { urls: "stun:stun.l.google.com:19302" }, // Public STUN
         {
-          urls: "turn:numb.viagenie.ca", // Public TURN
-          username: "webrtc@live.com",
-          credential: "muazkh",
+          urls: "turn:weatherradar.duckdns.org:3478", // Your TURN server
+          username: "webrtc",
+          credential: "demo1234",
         },
       ],
     });
