@@ -23,7 +23,9 @@ export default function Home() {
       socket.on("connect", () =>
         console.log("✅ Socket connected:", socket.id)
       );
-      socket.on("connect_error", (err) => console.error("❌ Socket connect error:", err));
+      socket.on("connect_error", (err) =>
+        console.error("❌ Socket connect error:", err)
+      );
     }
   }, []);
 
@@ -31,7 +33,6 @@ export default function Home() {
   useEffect(() => {
     if (!socket) return;
 
-    // --- SHARER: Viewer joined ---
     const handleViewerJoined = async (viewerId: string) => {
       if (role !== "sharer") return;
       console.log("👀 Viewer joined:", viewerId);
@@ -52,7 +53,6 @@ export default function Home() {
       socket.emit("offer", { viewerId, offer });
     };
 
-    // --- VIEWER: Receive offer ---
     const handleOffer = async ({ offer, sharerId }: any) => {
       if (role !== "viewer") return;
       console.log("📩 Received offer from sharer:", sharerId);
@@ -70,7 +70,6 @@ export default function Home() {
       socket.emit("answer", { sharerId, answer });
     };
 
-    // --- SHARER: Receive answer ---
     const handleAnswer = async ({ answer, viewerId }: any) => {
       const pc = peerConnections.current[viewerId];
       if (!pc) return;
@@ -100,7 +99,6 @@ export default function Home() {
       }
     };
 
-    // --- ICE candidate ---
     const handleIceCandidate = ({ candidate, from }: any) => {
       const pc = peerConnections.current[from];
       if (pc && candidate) {
@@ -122,13 +120,16 @@ export default function Home() {
     };
   }, [role]);
 
-  // --- Create peer connection with STUN/TURN ---
+  // --- Create peer connection with STUN + TURN ---
   const createPeerConnection = (targetId: string) => {
     const pc = new RTCPeerConnection({
       iceServers: [
-        { urls: "stun:stun.l.google.com:19302" }, // Public STUN server
-        // Optional TURN server:
-        // { urls: "turn:your-turn-server:3478", username: "user", credential: "pass" }
+        { urls: "stun:stun.l.google.com:19302" }, // STUN
+        {
+          urls: "turn:openrelay.metered.ca:443", // Free TURN server
+          username: "openrelayproject",
+          credential: "openrelayproject",
+        },
       ],
     });
 
@@ -146,6 +147,14 @@ export default function Home() {
 
     pc.onconnectionstatechange = () => {
       console.log(`Peer connection state with ${targetId}:`, pc.connectionState);
+    };
+
+    pc.iceconnectionstatechange = () => {
+      console.log(`ICE connection state with ${targetId}:`, pc.iceConnectionState);
+    };
+
+    pc.icegatheringstatechange = () => {
+      console.log(`ICE gathering state with ${targetId}:`, pc.iceGatheringState);
     };
 
     pc.onsignalingstatechange = () => {
