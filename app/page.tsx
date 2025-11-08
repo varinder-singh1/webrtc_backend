@@ -14,6 +14,10 @@ export default function Home() {
   const peerConnections = useRef<{ [key: string]: RTCPeerConnection }>({});
   const answerQueue = useRef<{ [key: string]: RTCSessionDescriptionInit[] }>({});
 
+  // ✅ Added size controls
+  const [localSize, setLocalSize] = useState({ w: 400, h: 250 });
+  const [remoteSize, setRemoteSize] = useState({ w: 400, h: 250 });
+
   // --- Initialize socket ---
   useEffect(() => {
     if (!socket) {
@@ -119,7 +123,7 @@ export default function Home() {
     };
   }, [role]);
 
-  // --- Create peer connection with XIRSYS TURN ---
+  // --- Create peer connection with TURN ---
   const createPeerConnection = (targetId: string) => {
     const pc = new RTCPeerConnection({
       iceServers: [
@@ -194,6 +198,7 @@ export default function Home() {
   return (
     <div className="flex flex-col items-center gap-4 p-4">
       <h1 className="text-2xl font-bold">WebRTC Screen Sharing</h1>
+
       <div className="flex gap-4">
         <button
           onClick={startSharing}
@@ -201,6 +206,7 @@ export default function Home() {
         >
           Start Sharing
         </button>
+
         <button
           onClick={startViewing}
           className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded"
@@ -209,20 +215,83 @@ export default function Home() {
         </button>
       </div>
 
-      <div className="mt-6 flex flex-col items-center">
-        <video
-          ref={localVideoRef}
-          autoPlay
-          playsInline
-          muted
-          className="w-96 border rounded"
-        />
-        <video
-          ref={remoteVideoRef}
-          autoPlay
-          playsInline
-          className="w-96 border rounded mt-4"
-        />
+      {/* ✅ Size Controls + Video Section */}
+      <div className="w-full max-w-3xl mt-8 p-4 border rounded-lg shadow">
+        <h2 className="text-xl font-semibold mb-4 text-center">
+          Video Size Controls
+        </h2>
+
+        <div className="grid grid-cols-2 gap-6">
+          {/* Local Video Controls */}
+          <div className="p-4 border rounded-lg bg-gray-50">
+            <h3 className="font-bold mb-2">Local Video Size</h3>
+            <div className="flex flex-col gap-2">
+              <input
+                type="number"
+                className="border p-2 rounded"
+                value={localSize.w}
+                onChange={(e) =>
+                  setLocalSize({ ...localSize, w: Number(e.target.value) })
+                }
+                placeholder="Width"
+              />
+              <input
+                type="number"
+                className="border p-2 rounded"
+                value={localSize.h}
+                onChange={(e) =>
+                  setLocalSize({ ...localSize, h: Number(e.target.value) })
+                }
+                placeholder="Height"
+              />
+            </div>
+          </div>
+
+          {/* Remote Video Controls */}
+          <div className="p-4 border rounded-lg bg-gray-50">
+            <h3 className="font-bold mb-2">Remote Video Size</h3>
+            <div className="flex flex-col gap-2">
+              <input
+                type="number"
+                className="border p-2 rounded"
+                value={remoteSize.w}
+                onChange={(e) =>
+                  setRemoteSize({ ...remoteSize, w: Number(e.target.value) })
+                }
+                placeholder="Width"
+              />
+              <input
+                type="number"
+                className="border p-2 rounded"
+                value={remoteSize.h}
+                onChange={(e) =>
+                  setRemoteSize({ ...remoteSize, h: Number(e.target.value) })
+                }
+                placeholder="Height"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Videos */}
+        <div className="mt-8 flex flex-col items-center gap-6">
+          <video
+            ref={localVideoRef}
+            autoPlay
+            playsInline
+            muted
+            style={{ width: localSize.w, height: localSize.h }}
+            className="border rounded"
+          />
+
+          <video
+            ref={remoteVideoRef}
+            autoPlay
+            playsInline
+            style={{ width: remoteSize.w, height: remoteSize.h }}
+            className="border rounded"
+          />
+        </div>
       </div>
     </div>
   );
