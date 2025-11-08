@@ -28,6 +28,15 @@ export default function Home() {
     }
   }, []);
 
+  // ✅ Auto start viewer when page loads
+  useEffect(() => {
+    const url = window.location.href;
+
+    if (url.includes("?viewer")) {
+      startViewing();
+    }
+  }, []);
+
   // --- Attach signaling events ---
   useEffect(() => {
     if (!socket) return;
@@ -73,17 +82,12 @@ export default function Home() {
       const pc = peerConnections.current[viewerId];
       if (!pc) return;
 
-      console.log(
-        "📩 Received answer from viewer:",
-        viewerId,
-        "state:",
-        pc.signalingState
-      );
+      console.log("📩 Received answer from viewer:", viewerId);
 
       const applyAnswer = async () => {
         try {
           await pc.setRemoteDescription(new RTCSessionDescription(answer));
-          console.log("✅ Remote description set for viewer:", viewerId);
+          console.log("✅ Remote description applied:", viewerId);
           pc.removeEventListener("signalingstatechange", applyAnswer);
         } catch (err) {
           console.error("❌ Failed to set remote description:", viewerId, err);
@@ -93,7 +97,6 @@ export default function Home() {
       if (pc.signalingState === "have-local-offer") {
         await applyAnswer();
       } else {
-        console.log("Waiting for peer to be ready:", viewerId);
         pc.addEventListener("signalingstatechange", applyAnswer);
       }
     };
@@ -119,7 +122,7 @@ export default function Home() {
     };
   }, [role]);
 
-  // --- Create peer connection with XIRSYS TURN ---
+  // --- Peer connection with XIRSYS TURN ---
   const createPeerConnection = (targetId: string) => {
     const pc = new RTCPeerConnection({
       iceServers: [
@@ -145,29 +148,11 @@ export default function Home() {
     pc.onicecandidate = (e) => {
       if (e.candidate) {
         socket.emit("ice-candidate", { target: targetId, candidate: e.candidate });
-        console.log("Sent ICE candidate to:", targetId);
       }
     };
 
     pc.ontrack = (e) => {
-      console.log("Received remote track from:", targetId);
       if (remoteVideoRef.current) remoteVideoRef.current.srcObject = e.streams[0];
-    };
-
-    pc.onconnectionstatechange = () => {
-      console.log(`Peer connection state with ${targetId}:`, pc.connectionState);
-    };
-
-    pc.onsignalingstatechange = () => {
-      console.log(`Peer signaling state with ${targetId}:`, pc.signalingState);
-    };
-
-    pc.oniceconnectionstatechange = () => {
-      console.log(`ICE connection state with ${targetId}:`, pc.iceConnectionState);
-    };
-
-    pc.onicegatheringstatechange = () => {
-      console.log(`ICE gathering state with ${targetId}:`, pc.iceGatheringState);
     };
 
     return pc;
@@ -176,24 +161,23 @@ export default function Home() {
   const startSharing = async () => {
     setRole("sharer");
     socket.emit("join-room", { roomId: ROOM_ID, role: "sharer" });
-    console.log("Starting screen sharing...");
 
     const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
     if (localVideoRef.current) {
       localVideoRef.current.srcObject = stream;
-      console.log("Local stream set for sharing");
     }
   };
 
   const startViewing = async () => {
     setRole("viewer");
     socket.emit("join-room", { roomId: ROOM_ID, role: "viewer" });
-    console.log("Joined room as viewer");
+    console.log("Viewer auto-joined");
   };
 
   return (
     <div className="flex flex-col items-center gap-4 p-4">
       <h1 className="text-2xl font-bold">WebRTC Screen Sharing</h1>
+
       <div className="flex gap-4">
         <button
           onClick={startSharing}
@@ -201,12 +185,8 @@ export default function Home() {
         >
           Start Sharing
         </button>
-        <button
-          onClick={startViewing}
-          className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded"
-        >
-          Start Viewing
-        </button>
+
+        {/* Viewer button removed because viewer auto-starts */}
       </div>
 
       <div className="mt-6 flex flex-col items-center">
