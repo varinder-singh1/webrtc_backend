@@ -10,27 +10,31 @@ export default function Home() {
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const [role, setRole] = useState<"sharer" | "viewer" | null>(null);
 
-  // Store peer connections per target
   const peerConnections = useRef<{ [key: string]: RTCPeerConnection }>({});
-  // Queue remote answers if peer is not ready
   const answerQueue = useRef<{ [key: string]: RTCSessionDescriptionInit[] }>({});
 
-  // Initialize socket once
+  // --- Initialize socket ---
   useEffect(() => {
     if (!socket) {
-      socket = io("https://weatherradar.duckdns.org/");
-      socket.on("connect", () => console.log("✅ Socket connected:------", socket.id));
+      socket = io("https://weatherradar.duckdns.org/", {
+        transports: ["websocket"],
+      });
+
+      socket.on("connect", () =>
+        console.log("✅ Socket connected:", socket.id)
+      );
+      socket.on("connect_error", (err) => console.error("❌ Socket connect error:", err));
     }
   }, []);
 
-  // Attach signaling events once
+  // --- Attach signaling events ---
   useEffect(() => {
     if (!socket) return;
 
     // --- SHARER: Viewer joined ---
     const handleViewerJoined = async (viewerId: string) => {
       if (role !== "sharer") return;
-      console.log("👀 Viewer joined:------", viewerId);
+      console.log("👀 Viewer joined:", viewerId);
 
       const pc = createPeerConnection(viewerId);
       peerConnections.current[viewerId] = pc;
@@ -38,12 +42,11 @@ export default function Home() {
 
       const stream = localVideoRef.current?.srcObject as MediaStream | null;
       if (stream) {
-        console.log("Adding local tracks to peer--------:", viewerId);
+        console.log("Adding local tracks to peer:", viewerId);
         stream.getTracks().forEach((t) => pc.addTrack(t, stream));
       }
 
       const offer = await pc.createOffer();
-      console.log("Created offer for viewer:", viewerId, offer.sdp?.slice(0, 50), "...");
       await pc.setLocalDescription(offer);
       console.log("Local description set for viewer:", viewerId);
       socket.emit("offer", { viewerId, offer });
@@ -72,7 +75,12 @@ export default function Home() {
       const pc = peerConnections.current[viewerId];
       if (!pc) return;
 
-      console.log("📩 Received answer from viewer:", viewerId, "signalingState:", pc.signalingState);
+      console.log(
+        "📩 Received answer from viewer:",
+        viewerId,
+        "signalingState:",
+        pc.signalingState
+      );
 
       const applyAnswer = async () => {
         try {
@@ -87,7 +95,7 @@ export default function Home() {
       if (pc.signalingState === "have-local-offer") {
         await applyAnswer();
       } else {
-        console.log("Waiting for peer to be ready before setting remote description:", viewerId);
+        console.log("Waiting for peer to be ready:", viewerId);
         pc.addEventListener("signalingstatechange", applyAnswer);
       }
     };
@@ -106,7 +114,6 @@ export default function Home() {
     socket.on("answer", handleAnswer);
     socket.on("ice-candidate", handleIceCandidate);
 
-    // Cleanup
     return () => {
       socket.off("viewer-joined", handleViewerJoined);
       socket.off("offer", handleOffer);
@@ -115,9 +122,15 @@ export default function Home() {
     };
   }, [role]);
 
-  // --- Create peer connection ---
+  // --- Create peer connection with STUN/TURN ---
   const createPeerConnection = (targetId: string) => {
-    const pc = new RTCPeerConnection();
+    const pc = new RTCPeerConnection({
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" }, // Public STUN server
+        // Optional TURN server:
+        // { urls: "turn:your-turn-server:3478", username: "user", credential: "pass" }
+      ],
+    });
 
     pc.onicecandidate = (e) => {
       if (e.candidate) {
