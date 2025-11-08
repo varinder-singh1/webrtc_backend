@@ -12,6 +12,8 @@ export default function Home() {
 
   // Store peer connections per target
   const peerConnections = useRef<{ [key: string]: RTCPeerConnection }>({});
+  // Queue remote answers if peer is not ready
+  const answerQueue = useRef<{ [key: string]: RTCSessionDescriptionInit[] }>({});
 
   // Initialize socket once
   useEffect(() => {
@@ -25,50 +27,78 @@ export default function Home() {
   useEffect(() => {
     if (!socket) return;
 
-    // Viewer joined (sharer side)
+    // --- SHARER: Viewer joined ---
     const handleViewerJoined = async (viewerId: string) => {
       if (role !== "sharer") return;
+      console.log("👀 Viewer joined:", viewerId);
 
       const pc = createPeerConnection(viewerId);
       peerConnections.current[viewerId] = pc;
+      answerQueue.current[viewerId] = [];
 
       const stream = localVideoRef.current?.srcObject as MediaStream | null;
-      if (stream) stream.getTracks().forEach((t) => pc.addTrack(t, stream));
+      if (stream) {
+        console.log("Adding local tracks to peer:", viewerId);
+        stream.getTracks().forEach((t) => pc.addTrack(t, stream));
+      }
 
       const offer = await pc.createOffer();
+      console.log("Created offer for viewer:", viewerId, offer.sdp?.slice(0, 50), "...");
       await pc.setLocalDescription(offer);
+      console.log("Local description set for viewer:", viewerId);
       socket.emit("offer", { viewerId, offer });
     };
 
-    // Receive offer (viewer side)
+    // --- VIEWER: Receive offer ---
     const handleOffer = async ({ offer, sharerId }: any) => {
       if (role !== "viewer") return;
+      console.log("📩 Received offer from sharer:", sharerId);
 
       const pc = createPeerConnection(sharerId);
       peerConnections.current[sharerId] = pc;
 
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      console.log("Remote description set from sharer:", sharerId);
+
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
+      console.log("Local answer created and set for sharer:", sharerId);
+
       socket.emit("answer", { sharerId, answer });
     };
 
-    // Receive answer (sharer side)
+    // --- SHARER: Receive answer ---
     const handleAnswer = async ({ answer, viewerId }: any) => {
       const pc = peerConnections.current[viewerId];
       if (!pc) return;
 
+      console.log("📩 Received answer from viewer:", viewerId, "signalingState:", pc.signalingState);
+
+      const applyAnswer = async () => {
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription(answer));
+          console.log("✅ Remote description set successfully for viewer:", viewerId);
+          pc.removeEventListener("signalingstatechange", applyAnswer);
+        } catch (err) {
+          console.error("❌ Failed to set remote description for viewer:", viewerId, err);
+        }
+      };
+
       if (pc.signalingState === "have-local-offer") {
-        await pc.setRemoteDescription(new RTCSessionDescription(answer));
+        await applyAnswer();
       } else {
-        console.warn("Cannot set remote, signaling state:", pc.signalingState);
+        console.log("Waiting for peer to be ready before setting remote description:", viewerId);
+        pc.addEventListener("signalingstatechange", applyAnswer);
       }
     };
 
-    // ICE candidate
+    // --- ICE candidate ---
     const handleIceCandidate = ({ candidate, from }: any) => {
       const pc = peerConnections.current[from];
-      if (pc && candidate) pc.addIceCandidate(new RTCIceCandidate(candidate));
+      if (pc && candidate) {
+        pc.addIceCandidate(new RTCIceCandidate(candidate));
+        console.log("Added ICE candidate from:", from);
+      }
     };
 
     socket.on("viewer-joined", handleViewerJoined);
@@ -76,6 +106,7 @@ export default function Home() {
     socket.on("answer", handleAnswer);
     socket.on("ice-candidate", handleIceCandidate);
 
+    // Cleanup
     return () => {
       socket.off("viewer-joined", handleViewerJoined);
       socket.off("offer", handleOffer);
@@ -84,33 +115,51 @@ export default function Home() {
     };
   }, [role]);
 
-  // Create peer connection
+  // --- Create peer connection ---
   const createPeerConnection = (targetId: string) => {
     const pc = new RTCPeerConnection();
 
     pc.onicecandidate = (e) => {
-      if (e.candidate)
+      if (e.candidate) {
         socket.emit("ice-candidate", { target: targetId, candidate: e.candidate });
+        console.log("Sent ICE candidate to:", targetId);
+      }
     };
 
     pc.ontrack = (e) => {
+      console.log("Received remote track from:", targetId);
       if (remoteVideoRef.current) remoteVideoRef.current.srcObject = e.streams[0];
+    };
+
+    pc.onconnectionstatechange = () => {
+      console.log(`Peer connection state with ${targetId}:`, pc.connectionState);
+    };
+
+    pc.onsignalingstatechange = () => {
+      console.log(`Peer signaling state with ${targetId}:`, pc.signalingState);
     };
 
     return pc;
   };
 
+  // --- Start sharing ---
   const startSharing = async () => {
     setRole("sharer");
     socket.emit("join-room", { roomId: ROOM_ID, role: "sharer" });
+    console.log("Starting screen sharing...");
 
     const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-    if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = stream;
+      console.log("Local stream set for sharing");
+    }
   };
 
+  // --- Start viewing ---
   const startViewing = async () => {
     setRole("viewer");
     socket.emit("join-room", { roomId: ROOM_ID, role: "viewer" });
+    console.log("Joined room as viewer");
   };
 
   return (
