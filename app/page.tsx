@@ -19,7 +19,7 @@ export default function Home() {
   useEffect(() => {
     if (!socket) {
       socket = io("https://weatherradar.duckdns.org/");
-      socket.on("connect", () => console.log("✅ Socket connected:", socket.id));
+      socket.on("connect", () => console.log("✅ Socket connected:------", socket.id));
     }
   }, []);
 
