@@ -21,9 +21,7 @@ export default function Home() {
         transports: ["websocket"],
       });
 
-      socket.on("connect", () =>
-        console.log("✅ Socket connected:", socket.id)
-      );
+      socket.on("connect", () => console.log("✅ Socket connected:", socket.id));
       socket.on("connect_error", (err) =>
         console.error("❌ Socket connect error:", err)
       );
@@ -78,17 +76,17 @@ export default function Home() {
       console.log(
         "📩 Received answer from viewer:",
         viewerId,
-        "signalingState:",
+        "state:",
         pc.signalingState
       );
 
       const applyAnswer = async () => {
         try {
           await pc.setRemoteDescription(new RTCSessionDescription(answer));
-          console.log("✅ Remote description set successfully for viewer:", viewerId);
+          console.log("✅ Remote description set for viewer:", viewerId);
           pc.removeEventListener("signalingstatechange", applyAnswer);
         } catch (err) {
-          console.error("❌ Failed to set remote description for viewer:", viewerId, err);
+          console.error("❌ Failed to set remote description:", viewerId, err);
         }
       };
 
@@ -121,15 +119,25 @@ export default function Home() {
     };
   }, [role]);
 
-  // --- Create peer connection with STUN/TURN ---
+  // --- Create peer connection with XIRSYS TURN ---
   const createPeerConnection = (targetId: string) => {
     const pc = new RTCPeerConnection({
       iceServers: [
-        { urls: "stun:stun.l.google.com:19302" }, // Public STUN
         {
-          urls: "turn:weatherradar.duckdns.org:3478", // Your TURN server
-          username: "webrtc",
-          credential: "demo1234",
+          urls: ["stun:fr-turn8.xirsys.com"],
+        },
+        {
+          username:
+            "GnTpLl-OzwrbegI8SLZGnt3XA1yT5wUJyVYFNEUh5Nl20LPVbP2CEmLRgTdE6-SGAAAAAGkPdz02MjgzMTc0OTk4",
+          credential: "779f1952-bcc4-11f0-b390-3eafa8ba3f72",
+          urls: [
+            "turn:fr-turn8.xirsys.com:80?transport=udp",
+            "turn:fr-turn8.xirsys.com:3478?transport=udp",
+            "turn:fr-turn8.xirsys.com:80?transport=tcp",
+            "turn:fr-turn8.xirsys.com:3478?transport=tcp",
+            "turns:fr-turn8.xirsys.com:443?transport=tcp",
+            "turns:fr-turn8.xirsys.com:5349?transport=tcp",
+          ],
         },
       ],
     });
