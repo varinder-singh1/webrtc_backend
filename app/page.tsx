@@ -30,7 +30,7 @@ export default function Home() {
     // --- SHARER: Viewer joined ---
     const handleViewerJoined = async (viewerId: string) => {
       if (role !== "sharer") return;
-      console.log("👀 Viewer joined:", viewerId);
+      console.log("👀 Viewer joined:------", viewerId);
 
       const pc = createPeerConnection(viewerId);
       peerConnections.current[viewerId] = pc;
@@ -38,7 +38,7 @@ export default function Home() {
 
       const stream = localVideoRef.current?.srcObject as MediaStream | null;
       if (stream) {
-        console.log("Adding local tracks to peer:", viewerId);
+        console.log("Adding local tracks to peer--------:", viewerId);
         stream.getTracks().forEach((t) => pc.addTrack(t, stream));
       }
 
