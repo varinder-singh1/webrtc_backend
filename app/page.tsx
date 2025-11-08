@@ -10,9 +10,12 @@ export default function Home() {
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const [role, setRole] = useState<"sharer" | "viewer" | null>(null);
 
+  // Store peer connections per target
   const peerConnections = useRef<{ [key: string]: RTCPeerConnection }>({});
+  // Queue remote answers if peer is not ready
   const answerQueue = useRef<{ [key: string]: RTCSessionDescriptionInit[] }>({});
 
+  // Initialize socket once
   useEffect(() => {
     if (!socket) {
       socket = io("https://weatherradar.duckdns.org/");
@@ -20,9 +23,11 @@ export default function Home() {
     }
   }, []);
 
+  // Attach signaling events once
   useEffect(() => {
     if (!socket) return;
 
+    // --- SHARER: Viewer joined ---
     const handleViewerJoined = async (viewerId: string) => {
       if (role !== "sharer") return;
       console.log("👀 Viewer joined:------", viewerId);
@@ -44,6 +49,7 @@ export default function Home() {
       socket.emit("offer", { viewerId, offer });
     };
 
+    // --- VIEWER: Receive offer ---
     const handleOffer = async ({ offer, sharerId }: any) => {
       if (role !== "viewer") return;
       console.log("📩 Received offer from sharer:", sharerId);
@@ -61,6 +67,7 @@ export default function Home() {
       socket.emit("answer", { sharerId, answer });
     };
 
+    // --- SHARER: Receive answer ---
     const handleAnswer = async ({ answer, viewerId }: any) => {
       const pc = peerConnections.current[viewerId];
       if (!pc) return;
@@ -85,6 +92,7 @@ export default function Home() {
       }
     };
 
+    // --- ICE candidate ---
     const handleIceCandidate = ({ candidate, from }: any) => {
       const pc = peerConnections.current[from];
       if (pc && candidate) {
@@ -98,6 +106,7 @@ export default function Home() {
     socket.on("answer", handleAnswer);
     socket.on("ice-candidate", handleIceCandidate);
 
+    // Cleanup
     return () => {
       socket.off("viewer-joined", handleViewerJoined);
       socket.off("offer", handleOffer);
@@ -106,19 +115,9 @@ export default function Home() {
     };
   }, [role]);
 
-  // --- UPDATED createPeerConnection ---
+  // --- Create peer connection ---
   const createPeerConnection = (targetId: string) => {
-    const pc = new RTCPeerConnection({
-      iceServers: [
-        { urls: "stun:stun.l.google.com:19302" }, // public STUN
-        // Optional TURN server for restrictive NATs
-        // {
-        //   urls: "turn:YOUR_TURN_SERVER:3478",
-        //   username: "user",
-        //   credential: "pass"
-        // }
-      ],
-    });
+    const pc = new RTCPeerConnection();
 
     pc.onicecandidate = (e) => {
       if (e.candidate) {
@@ -143,6 +142,7 @@ export default function Home() {
     return pc;
   };
 
+  // --- Start sharing ---
   const startSharing = async () => {
     setRole("sharer");
     socket.emit("join-room", { roomId: ROOM_ID, role: "sharer" });
@@ -155,6 +155,7 @@ export default function Home() {
     }
   };
 
+  // --- Start viewing ---
   const startViewing = async () => {
     setRole("viewer");
     socket.emit("join-room", { roomId: ROOM_ID, role: "viewer" });
